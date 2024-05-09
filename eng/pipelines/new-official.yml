@@ -1,0 +1,30 @@
+parameters:
+- name: SignType
+  displayName: The signing type to use
+  type: string
+  default: Test
+  values:
+   - None
+   - Test
+   - Real
+
+variables:
+  DOTNET_NOLOGO: 1
+  CI: true
+  ${{ if eq(parameters.SignType, 'None') }}:
+    SkipSigning: true
+
+trigger:
+ - '*'
+
+pr:
+ - '*'
+
+jobs:
+- job:
+  displayName: Build
+  pool:
+    vmImage: 'windows-latest'
+  steps:
+  - script: echo Hello, world!
+    displayName: 'Run a one-line script'

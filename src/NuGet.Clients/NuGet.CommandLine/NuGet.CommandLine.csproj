@@ -14,6 +14,8 @@
     <OutputType>Exe</OutputType>
     <SignWithMicrosoftKey>true</SignWithMicrosoftKey>
     <ComVisible>false</ComVisible>
+    <SkipIlMerge Condition="'$(SkipIlMerge)' == '' And ('$(BuildingInsideVisualStudio)' == 'true' Or '$(SkipILMergeOfNuGetExe)' == 'true' Or '$(DotNetBuildSourceOnly)' == 'true')">true</SkipIlMerge>
+    <ILMergeAfterTargets Condition="'$(SkipILMerge)' != 'true'">Build</ILMergeAfterTargets>
     <!-- Pack properties-->
     <PackProject>true</PackProject>
     <IncludeBuildOutput>false</IncludeBuildOutput>
@@ -58,6 +60,8 @@
     <PackageReference Include="Microsoft.VisualStudio.Setup.Configuration.Interop" ExcludeAssets="Runtime" />
     <ProjectReference Include="..\..\NuGet.Core\NuGet.PackageManagement\NuGet.PackageManagement.csproj" />
     <ProjectReference Include="..\..\NuGet.Core\NuGet.Build.Tasks\NuGet.Build.Tasks.csproj" />
+    <ProjectReference Include="..\..\NuGet.Core\NuGet.Commands\NuGet.Commands.csproj"
+                      OutputItemType="NuGetCommandsOutput" />
   </ItemGroup>
 
   <ItemGroup>
@@ -86,9 +90,7 @@
       <DependentUpon>NuGetResources.resx</DependentUpon>
     </Compile>
     <!-- nuget.exe localized assemblies -->
-    <EmbeddedResource Include="$(OutputPath)\**\$(AssemblyName).resources.dll" />
-    <!-- NuGet.Commands localized assemblies -->
-    <LocResource Include="$(OutputPath)\**\NuGet.Commands.resources.dll" />
+    <EmbeddedResource Include="$(OutputPath)**\$(AssemblyName).resources.dll" />
   </ItemGroup>
 
   <ItemGroup>
@@ -107,7 +109,7 @@
     <InternalsVisibleTo Include="NuGet.CommandLine.Test" />
   </ItemGroup>
 
-  <Target Name="DetermineILMergeNuGetExeInputsOutputs">
+  <Target Name="DetermineILMergeInputsOutputs">
     <PropertyGroup>
       <PathToBuiltNuGetExe>$(OutputPath)NuGet.exe</PathToBuiltNuGetExe>
       <PathToMergedNuGetExe>$(ArtifactsDirectory)$(VsixOutputDirName)\NuGet.exe</PathToMergedNuGetExe>
@@ -115,6 +117,8 @@
     <ItemGroup>
       <!-- Dependent assemblies -->
       <BuildArtifacts Include="$(OutputPath)\*.dll" />
+      <!-- NuGet.Commands localized assemblies -->
+      <LocResource Include="%(NuGetCommandsOutput.RootDir)%(NuGetCommandsOutput.Directory)**\NuGet.Commands.resources.dll" />
     </ItemGroup>
     <Message Text="$(MSBuildProjectName) -&gt; $(PathToMergedNuGetExe)" Importance="High" />
   </Target>
@@ -122,20 +126,45 @@
   <!-- 	Since we are moving some code and strings from NuGet.CommandLine to NuGet.Commands, we opted to go through normal localization process
         (build .resources.dll) and then add them to the ILMerged nuget.exe -->
   <!-- This will also be called from CI build, after assemblies are localized, since our test infra takes nuget.exe before Localization  -->
-  <Target Name="ILMergeNuGetExe"
-          AfterTargets="Build"
-          DependsOnTargets="DetermineILMergeNuGetExeInputsOutputs"
-          Inputs="$(PathToBuiltNuGetExe);@(BuildArtifacts)"
-          Outputs="$(PathToMergedNuGetExe)"
-          Condition="'$(BuildingInsideVisualStudio)' != 'true' and '$(SkipILMergeOfNuGetExe)' != 'true'" >
+  <Target Name="ILMerge"
+          AfterTargets="$(ILMergeAfterTargets)"
+          DependsOnTargets="DetermineILMergeInputsOutputs"
+          Inputs="$(MSBuildAllProjects);$(PathToBuiltNuGetExe);@(BuildArtifacts);@(LocResource)"
+          Outputs="$(PathToMergedNuGetExe)">
     <PropertyGroup>
-      <IlmergeCommand>$(ILMergeConsolePath) /lib:$(OutputPath) /out:$(PathToMergedNuGetExe) @(MergeAllowDup -> '/allowdup:%(Identity)', ' ') /log:$(OutputPath)IlMergeLog.txt</IlmergeCommand>
-      <IlmergeCommand Condition="'$(SkipSigning)' != 'true' And Exists($(AssemblyOriginatorKeyFile))">$(IlmergeCommand) /delaysign /keyfile:$(AssemblyOriginatorKeyFile)</IlmergeCommand>
-      <IlmergeCommand>$(IlmergeCommand) $(PathToBuiltNuGetExe) @(BuildArtifacts->'%(fullpath)', ' ')</IlmergeCommand>
-      <IlmergeCommand>$(IlmergeCommand) @(LocResource->'%(fullpath)', ' ')</IlmergeCommand>
+      <ILMergeLogFilePath>$(IntermediateOutputPath)ILMerge.log</ILMergeLogFilePath>
     </PropertyGroup>
+    
     <MakeDir Directories="$([System.IO.Path]::GetDirectoryName($(PathToMergedNuGetExe)))" />
-    <Exec Command="$(IlmergeCommand)" ContinueOnError="false" />
+
+    <Delete Files="$(ILMergeLogFilePath)"
+            Condition="Exists('$(ILMergeLogFilePath)')" />
+
+    <ItemGroup>
+      <ILMergeCommand Include="$(ILMergeConsolePath)" />
+      <ILMergeCommand Include="/lib:$(OutputPath)" />
+      <ILMergeCommand Include="/out:$(PathToMergedNuGetExe)" />
+      <ILMergeCommand Include="/allowdup:%(MergeAllowDup.Identity)" />
+      <ILMergeCommand Include="/log:$(ILMergeLogFilePath)" />
+      <ILMergeCommand Include="/delaysign" Condition="'$(SkipSigning)' != 'true' And Exists($(AssemblyOriginatorKeyFile))" />
+      <ILMergeCommand Include="/keyfile:$(AssemblyOriginatorKeyFile)" Condition="'$(SkipSigning)' != 'true' And Exists($(AssemblyOriginatorKeyFile))" />
+      <ILMergeCommand Include="$(PathToBuiltNuGetExe)" />
+      <ILMergeCommand Include="%(BuildArtifacts.FullPath)" />
+      <ILMergeCommand Include="%(LocResource.FullPath)" />
+    </ItemGroup>
+
+    <Exec Command="@(ILMergeCommand->'%(Identity)', ' ')"
+          IgnoreExitCode="true">
+      <Output TaskParameter="ExitCode" PropertyName="ILMergeExitCode" />
+    </Exec>
+
+    <ItemGroup>
+      <EmbedInBinlog Include="$(ILMergeLogFilePath)" />
+    </ItemGroup>
+    
+    <Error Text="ILMerge.exe failed, see the log file '$(ILMergeLogFilePath)' for more information."
+           Code="ILMERGE$(ILMergeExitCode)"
+           Condition="'$(ILMergeExitCode)' != '0'" />
   </Target>
 
   <!-- This strips away the framework assemblies from the resulting nuspec.-->

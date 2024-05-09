@@ -358,8 +358,8 @@
     </MSBuild>
     <ItemGroup>
       <VSIXSourceItem Include="@(LocalizedFilesForVsix)" />
-      <_LocalizedFiles Include="$(ArtifactsDirectory)microsoft.web.xdt\lib\net40\**\Microsoft.Web.XmlTransform.resources.dll" />
-      <_LocalizedFiles Include="$(ArtifactsDirectory)vsixlangpack\**\extension.vsixlangpack" />
+      <_LocalizedFiles Include="$(ArtifactsDirectory)microsoft.web.xdt\bin\$(Configuration)\net40\**\Microsoft.Web.XmlTransform.resources.dll" />
+      <_LocalizedFiles Include="$(ArtifactsDirectory)vsixlangpack\bin\$(Configuration)\net40\**\extension.vsixlangpack" />
       <_VsixLocFiles Include="@(_LocalizedFiles)">
         <TargetPath>%(_LocalizedFiles.RecursiveDir)%(_LocalizedFiles.Filename)%(_LocalizedFiles.Extension)</TargetPath>
       </_VsixLocFiles>

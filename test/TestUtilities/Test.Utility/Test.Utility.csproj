@@ -5,7 +5,7 @@
     <NoWarn Condition=" $(TargetFramework.StartsWith('netcoreapp')) ">$(NoWarn);CS1998</NoWarn>
     <PackProject>true</PackProject>
     <Shipping>true</Shipping>
-    <IsPackable>true</IsPackable>
+    <IsPackable Condition="'$(BuildRTM)' != 'true'">true</IsPackable>
     <SkipShared>true</SkipShared>
     <TestProject>false</TestProject>
     <NoWarn>$(NoWarn);VSTHRD001;VSTHRD002;VSTHRD110</NoWarn>

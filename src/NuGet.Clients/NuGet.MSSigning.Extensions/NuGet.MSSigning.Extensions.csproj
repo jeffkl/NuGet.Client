@@ -11,6 +11,8 @@
     <GetSigningInputsDependsOn>GetSigningInputsCustom</GetSigningInputsDependsOn>
     <GetSymbolsToIndexDependsOn>GetSymbolsToIndexCustom</GetSymbolsToIndexDependsOn>
     <SignWithMicrosoftKey>true</SignWithMicrosoftKey>
+    <SkipILMerge Condition="'$(SkipILMerge)' == '' And ('$(BuildingInsideVisualStudio)' == 'true' Or '$(DotNetBuildSourceOnly)' == 'true')">true</SkipILMerge>
+    <ILMergeAfterTargets Condition="'$(SkipILMerge)' != 'true'">Build</ILMergeAfterTargets>
   </PropertyGroup>
 
   <ItemGroup>
@@ -37,7 +39,7 @@
     </EmbeddedResource>
   </ItemGroup>
 
-  <Target Name="DetermineILMergeNuGetMssignExeInputsOutputs">
+  <Target Name="DetermineILMergeInputsOutputs">
     <PropertyGroup>
       <PathToBuiltNuGetExe>$(OutputPath)NuGet.exe</PathToBuiltNuGetExe>
       <PathToMergedNuGetExe>$(ArtifactsDirectory)$(VsixOutputDirName)\NuGet.Mssign.exe</PathToMergedNuGetExe>
@@ -48,19 +50,49 @@
     <Message Text="$(MSBuildProjectName) -&gt; $(PathToMergedNuGetExe)" Importance="High" />
   </Target>
 
-  <Target Name="ILMergeNuGetMssignExe"
-          AfterTargets="Build"
-          DependsOnTargets="DetermineILMergeNuGetMssignExeInputsOutputs"
-          Inputs="$(PathToBuiltNuGetExe);@(BuildArtifacts)"
-          Outputs="$(PathToMergedNuGetExe)"
-          Condition="'$(BuildingInsideVisualStudio)' != 'true'">
+  <Target Name="ILMerge"
+          AfterTargets="$(ILMergeAfterTargets)"
+          DependsOnTargets="DetermineILMergeInputsOutputs"
+          Inputs="$(MSBuildAllProjects);$(PathToBuiltNuGetExe);@(BuildArtifacts)"
+          Outputs="$(PathToMergedNuGetExe)">
     <Error Text="Build dependencies are inconsistent with mergeinclude specified in ilmerge.props" Condition="'@(BuildArtifacts-&gt;Count())' != '@(MergeInclude-&gt;Count())'" />
+
     <PropertyGroup>
-      <IlmergeCommand>$(ILMergeConsolePath) $(PathToBuiltNuGetExe) /lib:$(OutputPath) @(BuildArtifacts->'%(filename)%(extension)', ' ') /out:$(PathToMergedNuGetExe) @(MergeAllowDup -> '/allowdup:%(Identity)', ' ')</IlmergeCommand>
-      <IlmergeCommand Condition="'$(SkipSigning)' != 'true' And Exists($(AssemblyOriginatorKeyFile))">$(IlmergeCommand) /delaysign /keyfile:$(AssemblyOriginatorKeyFile)</IlmergeCommand>
+      <ILMergeLogFilePath>$(IntermediateOutputPath)ILMerge.log</ILMergeLogFilePath>
     </PropertyGroup>
+
     <MakeDir Directories="$([System.IO.Path]::GetDirectoryName($(PathToMergedNuGetExe)))" />
-    <Exec Command="$(IlmergeCommand)" ContinueOnError="false" />
+
+    <Delete Files="$(ILMergeLogFilePath)"
+            Condition="Exists('$(ILMergeLogFilePath)')" />
+
+    <ItemGroup>
+      <ILMergeCommand Include="$(ILMergeConsolePath)" />
+      <ILMergeCommand Include="$(PathToBuiltNuGetExe)" />
+      <ILMergeCommand Include="/lib:$(OutputPath)" />
+      <ILMergeCommand Include="/out:$(PathToMergedNuGetExe)" />
+      <ILMergeCommand Include="/allowdup:%(MergeAllowDup.Identity)" />
+      <ILMergeCommand Include="/log:$(ILMergeLogFilePath)" />
+      <ILMergeCommand Include="/delaysign" Condition="'$(SkipSigning)' != 'true' And Exists($(AssemblyOriginatorKeyFile))" />
+      <ILMergeCommand Include="/keyfile:$(AssemblyOriginatorKeyFile)" Condition="'$(SkipSigning)' != 'true' And Exists($(AssemblyOriginatorKeyFile))" />
+      <ILMergeCommand Include="%(BuildArtifacts.FullPath)" />
+    </ItemGroup>
+    <!--<PropertyGroup>
+      <ILMergeCommand>$(ILMergeConsolePath) $(PathToBuiltNuGetExe) /lib:$(OutputPath) @(BuildArtifacts->'%(filename)%(extension)', ' ') /out:$(PathToMergedNuGetExe) @(MergeAllowDup -> '/allowdup:%(Identity)', ' ')</ILMergeCommand>
+      <ILMergeCommand Condition="'$(SkipSigning)' != 'true' And Exists($(AssemblyOriginatorKeyFile))">$(ILMergeCommand) /delaysign /keyfile:$(AssemblyOriginatorKeyFile)</ILMergeCommand>
+    </PropertyGroup>-->
+    <Exec Command="@(ILMergeCommand->'%(Identity)', ' ')"
+          IgnoreExitCode="true">
+      <Output TaskParameter="ExitCode" PropertyName="ILMergeExitCode" />
+    </Exec>
+
+    <ItemGroup>
+      <EmbedInBinlog Include="$(ILMergeLogFilePath)" />
+    </ItemGroup>
+
+    <Error Text="ILMerge.exe failed, see the log file '$(ILMergeLogFilePath)' for more information."
+           Code="ILMERGE$(ILMergeExitCode)"
+           Condition="'$(ILMergeExitCode)' != '0'" />
   </Target>
 
   <Target Name="GetSigningInputsCustom" Returns="@(DllsToSign)">

@@ -2,8 +2,7 @@
 *.nuget.targets
 *.nuget.props
 
-# Project K
-project.lock.json
+localize/
 artifacts/
 
 # Tests

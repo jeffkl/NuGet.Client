@@ -16,7 +16,8 @@
   </ItemGroup>
 
   <Target Name="CreateEndToEndTestPackage"
-          AfterTargets="PrepareForRun">
+          AfterTargets="PrepareForRun"
+          Condition="'$(SkipEndToEndPackage)' != 'true'">
     <PropertyGroup>
       <ScriptsDirectory>$([MSBuild]::NormalizeDirectory($(WorkingDirectory), 'scripts'))</ScriptsDirectory>
       <EndToEndPackageFullPath>$([MSBuild]::NormalizePath($(EndToEndPackageOutputPath), 'EndToEnd.zip'))</EndToEndPackageFullPath>

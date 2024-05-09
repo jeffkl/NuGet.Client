@@ -26,6 +26,15 @@
     <VSTestDependsOn Condition="'$(TargetFramework)' != ''">VSTestSingleTargetFramework</VSTestDependsOn>
   </PropertyGroup>
 
+  <Target Name="GetOfficialBuildProjects" Returns="@(OfficialBuildProject)">
+    <MSBuild Projects="@(ProjectReference)"
+             BuildInParallel="true"
+             Targets="IncludeInOfficialBuild">
+      <Output TaskParameter="TargetOutputs"
+              ItemName="OfficialBuildProject" />
+    </MSBuild>
+  </Target>
+
   <!--
     Defines a target which is run when a user executes 'dotnet test'.  This target runs tests for all frameworks or a single target framework depending on whether or not the user specified the framework at the command-line.
   -->

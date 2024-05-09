@@ -117,7 +117,7 @@
     ============================================================
   -->
   <Target Name="PackProjects" Condition=" '$(PackProject)' == 'true' ">
-    <Message Text="Packing $(ProjectName)" Importance="high" />
+    <Message Text="Packing $([MSBuild]::ValueOrDefault('$(ProjectName)', '$(MSBuildProjectName)'))" Importance="high" />
 
     <!-- Run pack on the project -->
     <MSBuild
@@ -151,7 +151,7 @@
   -->
   <Target Name="GetSymbolsToIndex" DependsOnTargets="$(GetSymbolsToIndexDependsOn)" Returns="@(SymbolFilesToIndex)" />
   
-  <Target Name="GetSymbolsToIndexDefault" DependsOnTargets="GetTargetFrameworkSet" Returns="@(SymbolFilesToIndex)" Condition=" '$(Shipping)' == 'true' ">
+  <Target Name="GetSymbolsToIndexDefault" DependsOnTargets="GetTargetFrameworkSet" Returns="@(SymbolFilesToIndex)" Condition=" '$(Shipping)' == 'true' And '$(IncludeAssemblyInVSIXContainer)' != 'false'">
     <MSBuild
       Projects="$(MSBuildProjectFullPath)"
       Targets="$(SignTargetsForRealSigning);$(SymbolTargetsToGetPdbs)"
@@ -178,7 +178,7 @@
     The default target to get signing inputs for a particular project
     ============================================================
   -->
-  <Target Name="GetSigningInputsDefault" DependsOnTargets="GetTargetFrameworkSet" Returns="@(DllsToSign)" Condition=" '$(Shipping)' == 'true' ">
+  <Target Name="GetSigningInputsDefault" DependsOnTargets="GetTargetFrameworkSet" Returns="@(DllsToSign)" Condition=" '$(Shipping)' == 'true' And '$(IncludeAssemblyInVSIXContainer)' != 'false' ">
     <MSBuild
       Projects="$(MSBuildProjectFullPath)"
       Targets="$(SignTargetsForRealSigning);$(AdditionalSignTargetsForRealSigning)"
@@ -244,8 +244,7 @@
     <MSBuild
       Projects="$(MSBuildProjectFullPath)"
       Targets="$(LocTargets)"
-      Properties="TargetFramework=%(ProjectTargetFrameworkEntries.Identity);
-                  BuildProjectReferences=false;">
+      Properties="TargetFramework=%(ProjectTargetFrameworkEntries.Identity)">
 
       <Output
           TaskParameter="TargetOutputs"
@@ -253,14 +252,27 @@
     </MSBuild>
   </Target>
 
-  <Target Name="GetBuildOutputWithLocMetadata" DependsOnTargets="BuiltProjectOutputGroup" Returns="@(DllsToLocalizeWithMetadata)">
+  <Target Name="GetLocalizationInputsForTargetFramework" Returns="@(DllsToLocalize)" Condition="'$(Shipping)' == 'true'">
+    <MSBuild
+      Projects="$(MSBuildProjectFullPath)"
+      Targets="$(LocTargets)"
+      Properties="TargetFramework=%(ProjectTargetFrameworkEntries.Identity)">
+
+      <Output
+          TaskParameter="TargetOutputs"
+          ItemName="DllsToLocalize" />
+    </MSBuild>
+  </Target>
+
+  <Target Name="GetBuildOutputWithLocMetadata" DependsOnTargets="BuiltProjectOutputGroup" Returns="@(DllsToLocalizeWithMetadata)" Condition="'$(Shipping)' == 'true'">
     <ItemGroup>
       <!-- remove all net45 assemblies, otherwise loc tools have problem loading two assemblies of same name in same appdomain. net45 doesn't ship in VSIX, so doesn't need loc. -->
       <DllsToLocalizeWithMetadata Include="@(BuiltProjectOutputGroupOutput->'%(FinalOutputPath)')"
 Condition=" ('%(Extension)' == '.dll' OR '%(Filename)' == 'NuGet.CommandLine.XPlat' OR '%(Filename)' == 'NuGet') AND !($([System.String]::new('%(FullPath)').Contains('\net45\'))) " KeepDuplicates="false">
-        <TranslationFile>$(LocalizationWorkDirectory)\{Lang}\15\%(Filename)%(Extension).lcl</TranslationFile>    <!--Required: translation file-->
-        <LciCommentFile>$(LocalizationWorkDirectory)\comments\15\%(Filename)%(Extension).lci</LciCommentFile>
+        <TranslationFile>$(LocalizationRootDirectory)\{Lang}\15\%(Filename)%(Extension).lcl</TranslationFile>    <!--Required: translation file-->
+        <LciCommentFile>$(LocalizationRootDirectory)\comments\15\%(Filename)%(Extension).lci</LciCommentFile>
         <HasLceComments>false</HasLceComments>
+        <TargetFramework>$(TargetFramework)</TargetFramework>
       </DllsToLocalizeWithMetadata>
     </ItemGroup>
   </Target>
